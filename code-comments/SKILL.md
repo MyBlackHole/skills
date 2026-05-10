@@ -9,6 +9,8 @@ description: Use when adding Chinese annotation comments to code, or when asked 
 
 Adding Chinese comments **directly into the original source files** as **supplementary** annotations — editing the file in-place, not creating a separate annotation file or copy. The original English comments are the authoritative documentation — Chinese comments are auxiliary translations/explanations that must **never** replace them.
 
+**思考语言要求**: 处理中文代码注释相关任务时，AI 的内部推理、分析和决策过程须使用简体中文。判断哪些代码段需要中文注释、考虑注释措辞、验证英文注释是否被保留等思考环节，均应以中文进行。
+
 ## Core Rules
 
 1. **Add comment blocks BEFORE important functions/classes/types** — a Chinese summary block above the declaration
@@ -93,6 +95,7 @@ Avoid adding `// 备注:` in these cases — the English is already sufficient:
 | Creating a separate annotation file instead of editing the original | Comments detached from source code | Edit the original file directly — use Edit tool to insert Chinese comments inline |
 | Over-annotating trivial code (`i++` → `// 备注：自增i`) | Noise that hurts readability | Skip obvious one-liners — English is sufficient |
 | Using inconsistent Chinese prefix (mix of `// 备注:`, `// 说明:`, `// 中文:`) | Hard to search/filter later | Always use `// 备注:` — consistent and searchable |
+| 用英文思考再决定加什么中文注释 | 思考语言与产出语言不一致，导致注释措辞生硬不自然 | 从思考阶段就使用中文，直接产生贴切的中文注释 |
 
 ## Red Flags
 
@@ -103,11 +106,13 @@ Avoid adding `// 备注:` in these cases — the English is already sufficient:
 - **"I'll create a separate annotation file to keep the originals clean"** — No. Edit the original file in-place. The whole point is having Chinese annotations in the same file as the code.
 - **"Every line needs a Chinese note"** — No. Skip trivial one-liners, obvious getter/setters, and boilerplate.
 - **"I'll use different prefixes for variety"** — No. Always `// 备注:` for consistency.
+- **"I think in English and output Chinese comments"** — No. Think in Chinese from the start to produce natural, idiomatic Chinese annotations.
 
 ## Verification Checklist (MANDATORY)
 
 After adding Chinese comments, ALWAYS verify:
 
+- [ ] 思考过程确认：添加注释时的分析、判断、措辞选择均使用中文进行
 - [ ] Re-read the file and confirm every original English comment is still present word-for-word
 - [ ] Chinese comments are on separate lines, not replacing English ones
 - [ ] No code was modified
