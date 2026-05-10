@@ -458,7 +458,148 @@ requests==2.31.0
 
 ---
 
-## 通用原则 (所有语言)
+## 错误处理规范 (Error Handling Patterns)
+
+安全与错误处理高度相关——忽略错误、错误信息泄露、资源泄漏是常见漏洞来源。
+
+### C 错误处理
+
+```
+// ❌ 不安全 — 忽略返回值，忽略 errno
+FILE* f = fopen("config.json", "r");
+char buf[256];
+fread(buf, 1, sizeof(buf), f);  // f 可能为 NULL
+
+// ✅ 安全 — 检查返回值 + 重置 errno
+errno = 0;
+FILE* f = fopen("config.json", "r");
+if (f == NULL) {
+    // 备注：文件打开失败，记录具体错误
+    perror("open config.json");
+    return ERROR_FILE;
+}
+```
+
+| 反模式 | 说明 |
+|--------|------|
+| 忽略 `malloc` / `fopen` 返回值 | 后续解引用 NULL 指针 |
+| 不检查 `printf` / `scanf` 返回值 | I/O 错误被静默吞掉 |
+| `errno` 未重置直接调用 | 残留 errno 导致误判 |
+| 错误路径上未释放资源 | 内存/文件描述符泄漏 |
+
+### C++ 错误处理
+
+```
+// ❌ 不安全 — 析构函数抛异常
+struct Bad {
+    ~Bad() {
+        throw std::runtime_error("cleanup failed");  //  terminate!
+    }
+};
+
+// ✅ 安全 — 析构函数不抛异常，用成员函数报告错误
+struct Good {
+    ~Good() noexcept { cleanup(); }
+    void cleanup() noexcept {
+        // 处理清理逻辑，不抛异常
+    }
+};
+```
+
+| 原则 | 说明 |
+|------|------|
+| RAII | 资源在构造时获取，析构时释放 — 异常安全的基础 |
+| 析构函数 `noexcept` | 析构抛异常导致 `std::terminate` |
+| 异常安全保证 | 基本保证（不泄漏）→ 强保证（回滚）→ nothrow |
+| 不要吞异常 | `catch(...){}` 隐藏所有错误 |
+
+### Rust 错误处理
+
+```
+// ❌ 不安全 — unwrap 泛滥，生产环境 panic
+let data = fetch_data().unwrap();
+let parsed = data.parse::<i32>().unwrap();
+
+// ✅ 安全 — 统一错误类型 + 传播
+#[derive(Debug, thiserror::Error)]
+enum AppError {
+    #[error("数据获取失败: {0}")]
+    FetchFailed(String),
+    #[error("数据解析失败: {0}")]
+    ParseFailed(String),
+}
+
+fn process() -> Result<(), AppError> {
+    let data = fetch_data().map_err(|e| AppError::FetchFailed(e.to_string()))?;
+    let parsed = data.parse::<i32>()
+        .map_err(|e| AppError::ParseFailed(e.to_string()))?;
+    Ok(())
+}
+```
+
+| 反模式 | 正确做法 |
+|--------|---------|
+| `unwrap()` / `expect()` | `?` 传播 + `map_err` 转换 |
+| 裸 `String` 作为错误类型 | `thiserror` 定义结构化错误 |
+| `Box<dyn Error>` 过度使用 | 库代码用 `thiserror`，应用代码用 `anyhow` |
+| 忽略 `Result` 警告 | 显式处理或 `let _ =` 表明意图 |
+
+### Go 错误处理
+
+```
+// ❌ 不安全 — 忽略错误 + 无上下文
+rows, _ := db.Query(query)
+result, _ := doSomething()
+
+// ✅ 安全 — 包装错误 + 逐层传递
+rows, err := db.QueryContext(ctx, query)
+if err != nil {
+    return fmt.Errorf("查询用户失败: %w", err)
+}
+defer rows.Close()
+
+// 错误类型判断
+if errors.Is(err, sql.ErrNoRows) {
+    // 备注：无数据是预期行为
+    return nil, nil
+}
+```
+
+| 原则 | 说明 |
+|------|------|
+| 永不忽略 `error` | 使用 `_` 前确认真的不需要处理 |
+| 用 `%w` 包装 | `fmt.Errorf("context: %w", err)` 保留错误链 |
+| 用 `errors.Is` / `errors.As` | 替代直接类型断言，兼容包装链 |
+| 尽早返回 | 减少嵌套层级，提高可读性 |
+| Sentinel error 用 `var` | `var ErrNotFound = errors.New("not found")` |
+
+### Python 错误处理
+
+```
+// ❌ 不安全 — 裸 except 吞掉所有异常
+try:
+    result = process_data(input)
+except:  # 捕捉到 KeyboardInterrupt、SystemExit 等
+    pass
+
+// ✅ 安全 — 指定具体异常类型
+try:
+    result = process_data(input)
+except ValueError as e:
+    // 备注：输入格式错误，记录日志
+    log.warning("输入无效: %s", e)
+    return default_value
+except OSError as e:
+    log.error("IO 错误: %s", e)
+    raise
+```
+
+| 反模式 | 正确做法 |
+|--------|---------|
+| `except:` | `except SpecificError:` |
+| `except Exception as e: pass` | 至少 `log.warning` 或 re-raise |
+| 返回错误码代替异常 | Pythonic 方式是用异常 |
+| `raise e` 掩盖 traceback | `raise`（不加参数）保留调用栈 |
 
 | 原则 | 说明 |
 |------|------|
